@@ -1,54 +1,71 @@
-// Get the packages we need
-var express = require('express'),
-    router = express.Router(),
-    mongoose = require('mongoose'),
-    bodyParser = require('body-parser');
+// server.js
 
-// Read .env file
-require('dotenv').config();
-
-// Create our Express application
-var app = express();
-
-// Use environment defined port or 3000
-var port = process.env.PORT || 3000;
-
-// Connect to a MongoDB --> Uncomment this once you have a connection string!!
-//mongoose.connect(process.env.MONGODB_URI,  { useNewUrlParser: true });
-mongoose.Promise = global.Promise;
-var mongoUri = process.env.MONGODB_URI;
-
-if (!mongoUri) {
-    console.warn('Warning: MONGODB_URI is not set. API routes will fail until a connection string is provided.');
-} else {
-    mongoose.connect(mongoUri, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
-    }).then(function () {
-        console.log('Connected to MongoDB');
-    }).catch(function (err) {
-        console.error('MongoDB connection error:', err.message);
-    });
-}
-
-// Allow CORS so that backend and frontend could be put on different servers
-var allowCrossDomain = function (req, res, next) {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept");
-    res.header("Access-Control-Allow-Methods", "POST, GET, PUT, DELETE, OPTIONS");
+// Only load .env locally; Render injects env vars in production
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config();
+  }
+  
+  const express = require('express');
+  const mongoose = require('mongoose');
+  
+  const app = express();
+  
+  // Respect Render/Heroku-style port binding
+  const port = process.env.PORT || 3000;
+  
+  // Basic health check for Render
+  app.get('/healthz', (_req, res) => {
+    res.status(200).json({ message: 'OK', data: null });
+  });
+  
+  // CORS (simple, permissive — fine for MP)
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header(
+      'Access-Control-Allow-Headers',
+      'X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept'
+    );
+    res.header('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
     next();
-};
-app.use(allowCrossDomain);
-
-// Use the body-parser package in our application
-app.use(bodyParser.urlencoded({
-    extended: true
-}));
-app.use(bodyParser.json());
-
-// Use routes as a module (see index.js)
-require('./routes')(app, router);
-
-// Start the server
-app.listen(port);
-console.log('Server running on port ' + port);
+  });
+  
+  // Built-in body parsers (no need for body-parser package on modern Express)
+  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json());
+  
+  // Mount routes
+  require('./routes')(app, express.Router());
+  
+  // ----- Mongo connection -----
+  mongoose.Promise = global.Promise;
+  
+  const mongoUri = process.env.MONGODB_URI; // MUST be mongodb+srv://... from Atlas
+  const dbName = process.env.MONGODB_DBNAME || 'mp3';
+  
+  if (!mongoUri) {
+    console.warn(
+      'Warning: MONGODB_URI is not set. API routes will fail until a connection string is provided.'
+    );
+  } else {
+    (async () => {
+      try {
+        // With Mongoose 7+, no need for useNewUrlParser/useUnifiedTopology
+        await mongoose.connect(mongoUri, { dbName });
+        console.log('Mongo connected');
+      } catch (err) {
+        // Don’t print the full URI; keep logs clean of secrets
+        console.error('MongoDB connection error:', err.message);
+        // Optional: exit so Render restarts; comment out if you prefer the server to stay up
+        // process.exit(1);
+      }
+    })();
+  }
+  
+  // Start the server
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+  });
+  
+  // Export app for tests (harmless if unused)
+  module.exports = app;
+  
