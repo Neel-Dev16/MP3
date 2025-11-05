@@ -13,10 +13,17 @@ if (process.env.NODE_ENV !== 'production') {
   // Respect Render/Heroku-style port binding
   const port = process.env.PORT || 3000;
   
-  // Basic health check for Render
-  app.get('/healthz', (_req, res) => {
-    res.status(200).json({ message: 'OK', data: null });
+// Friendly root + health checks
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    message: 'Llama.io MP3 API is running',
+    data: { docs: '/api/users, /api/tasks, /healthz' }
   });
+});
+
+app.get('/healthz', (_req, res) => {
+  res.status(200).json({ message: 'OK', data: null });
+});
   
   // CORS (simple, permissive — fine for MP)
   app.use((req, res, next) => {
@@ -49,8 +56,11 @@ if (process.env.NODE_ENV !== 'production') {
   } else {
     (async () => {
       try {
-        // With Mongoose 7+, no need for useNewUrlParser/useUnifiedTopology
-        await mongoose.connect(mongoUri, { dbName });
+        await mongoose.connect(mongoUri, {
+          dbName,
+          useNewUrlParser: true,
+          useUnifiedTopology: true
+        });
         console.log('Mongo connected');
       } catch (err) {
         // Don’t print the full URI; keep logs clean of secrets
